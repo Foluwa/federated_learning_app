@@ -19,10 +19,12 @@ class FlowerClient(NumPyClient):
 
     def fit(self, parameters, config):
         set_weights(self.net, parameters)
+        print('config:', config)
         train_loss = train(
             self.net,
             self.trainloader,
             self.local_epochs,
+            config["lr"], # Learning rate from config
             self.device,
         )
         return (
