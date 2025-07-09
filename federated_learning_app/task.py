@@ -31,16 +31,28 @@ class Net(nn.Module):
         x = F.relu(self.fc2(x))
         return self.fc3(x)
 
+def get_transforms():
+    """Return a function that apply standard transformations to images."""
+
+    pytorch_transforms = Compose([ToTensor(), Normalize((0.5,), (0.5,))])
+
+    def apply_transforms(batch):
+        """Apply transforms to the partition from FederatedDataset."""
+        batch["image"] = [pytorch_transforms(img) for img in batch["image"]]
+        return batch
+
+    return apply_transforms
 
 fds = None  # Cache FederatedDataset
 
-
 def load_data(partition_id: int, num_partitions: int):
-    """Load partition CIFAR10 data."""
+    """Load partition FashionMNIST data."""
     # Only initialize `FederatedDataset` once
     global fds
     if fds is None:
-        partitioner = DirichletPartitioner(num_partitions=num_partitions, partition_by="label", alpha=1.0)
+        partitioner = DirichletPartitioner(
+            num_partitions=num_partitions, partition_by="label", alpha=1.0
+        )
         fds = FederatedDataset(
             dataset="zalando-datasets/fashion_mnist",
             partitioners={"train": partitioner},
@@ -48,22 +60,11 @@ def load_data(partition_id: int, num_partitions: int):
     partition = fds.load_partition(partition_id)
     # Divide data on each node: 80% train, 20% test
     partition_train_test = partition.train_test_split(test_size=0.2, seed=42)
-    pytorch_transforms = Compose(
-        # [ToTensor(), Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))]
-        [Pad(2), ToTensor(), Normalize((0.5), (0.5))]
-    )
 
-    def apply_transforms(batch):
-        """Apply transforms to the partition from FederatedDataset."""
-        batch["image"] = [pytorch_transforms(img) for img in batch["image"]]
-        return batch
-
-    partition_train_test = partition_train_test.with_transform(apply_transforms)
+    partition_train_test = partition_train_test.with_transform(get_transforms())
     trainloader = DataLoader(partition_train_test["train"], batch_size=32, shuffle=True)
     testloader = DataLoader(partition_train_test["test"], batch_size=32)
-    # print(f"Loaded partition {partition_id} with {len(trainloader.dataset)} training samples and {len(testloader.dataset)} test samples.")
     return trainloader, testloader
-
 
 def train(net, trainloader, epochs, device):
     """Train the model on the training set."""
