@@ -1,0 +1,39 @@
+# Federated Learning Requirements for Docker Simulation
+
+# Core FL framework
+flwr[simulation]>=1.19.0
+flwr-datasets[vision]>=0.5.0
+
+# ML libraries (CPU-optimized for device simulation)
+torch==2.5.1
+torchvision==0.20.1
+
+# Medical imaging dataset
+medmnist>=2.2.3
+
+# ML utilities
+scikit-learn>=1.0.0
+numpy>=1.21.0
+
+# Visualization and analysis
+matplotlib>=3.5.0
+seaborn>=0.11.0
+pandas>=1.3.0
+
+# Experiment tracking
+mlflow>=2.0.0
+
+# Device simulation utilities
+psutil>=5.8.0
+py-cpuinfo>=8.0.0
+
+# Network utilities
+requests>=2.25.0
+urllib3>=1.26.0
+
+# Performance monitoring
+prometheus-client>=0.11.0
+
+# Development utilities
+tqdm>=4.62.0
+colorama>=0.4.4

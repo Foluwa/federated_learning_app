@@ -1,0 +1,177 @@
+version: '3.8'
+
+services:
+  # Federated Learning Server
+  fl-server:
+    build:
+      context: ..
+      dockerfile: docker_simulation/dockerfiles/server.Dockerfile
+    image: fl-simulation/server:latest
+    container_name: fl-server
+    hostname: server
+    ports:
+      - "8080:8080"
+      - "8081:8081"  # MLflow UI
+    environment:
+      - DEVICE_TYPE=server
+      - MODE=${MODE:-dev}
+    volumes:
+      - ../federated_learning_app:/app/federated_learning_app
+      - ../saved_models:/app/saved_models
+      - ./logs:/app/logs
+    networks:
+      fl-network:
+        ipv4_address: 172.20.0.10
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: '8.0'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    command: ["python", "-m", "flwr.server", "--config", "federated_learning_app/server_app:app"]
+
+  # Raspberry Pi Devices (scaled via environment variable)
+  raspberry-pi:
+    build:
+      context: ..
+      dockerfile: docker_simulation/dockerfiles/raspberry_pi.Dockerfile
+    image: fl-simulation/raspberry-pi:latest
+    environment:
+      - DEVICE_TYPE=raspberry_pi
+      - CLIENT_ID=${CLIENT_ID:-0}
+      - MODE=${MODE:-dev}
+    volumes:
+      - ../federated_learning_app:/app/federated_learning_app
+      - ./logs:/app/logs
+    networks:
+      - fl-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+      replicas: ${PI_COUNT:-2}
+    depends_on:
+      - fl-server
+    command: ["python", "-m", "flwr.client", "--server", "fl-server:8080"]
+
+  # Mobile Devices
+  mobile:
+    build:
+      context: ..
+      dockerfile: docker_simulation/dockerfiles/mobile.Dockerfile
+    image: fl-simulation/mobile:latest
+    environment:
+      - DEVICE_TYPE=mobile
+      - CLIENT_ID=${CLIENT_ID:-0}
+      - MODE=${MODE:-dev}
+    volumes:
+      - ../federated_learning_app:/app/federated_learning_app
+      - ./logs:/app/logs
+    networks:
+      - fl-network
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: '2.0'
+      replicas: ${MOBILE_COUNT:-2}
+    depends_on:
+      - fl-server
+    command: ["python", "-m", "flwr.client", "--server", "fl-server:8080"]
+
+  # Medical Workstations
+  workstation:
+    build:
+      context: ..
+      dockerfile: docker_simulation/dockerfiles/workstation.Dockerfile
+    image: fl-simulation/workstation:latest
+    environment:
+      - DEVICE_TYPE=workstation
+      - CLIENT_ID=${CLIENT_ID:-0}
+      - MODE=${MODE:-dev}
+    volumes:
+      - ../federated_learning_app:/app/federated_learning_app
+      - ./logs:/app/logs
+    networks:
+      - fl-network
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '4.0'
+      replicas: ${WORKSTATION_COUNT:-1}
+    depends_on:
+      - fl-server
+    command: ["python", "-m", "flwr.client", "--server", "fl-server:8080"]
+
+  # Server-class Devices (data centers)
+  server-device:
+    build:
+      context: ..
+      dockerfile: docker_simulation/dockerfiles/workstation.Dockerfile  # Use workstation as base
+    image: fl-simulation/server-device:latest
+    environment:
+      - DEVICE_TYPE=server
+      - CLIENT_ID=${CLIENT_ID:-0}
+      - MODE=${MODE:-dev}
+    volumes:
+      - ../federated_learning_app:/app/federated_learning_app
+      - ./logs:/app/logs
+    networks:
+      - fl-network
+    deploy:
+      resources:
+        limits:
+          memory: 16G
+          cpus: '8.0'
+      replicas: ${SERVER_COUNT:-0}
+    depends_on:
+      - fl-server
+    command: ["python", "-m", "flwr.client", "--server", "fl-server:8080"]
+
+  # Network simulation and monitoring
+  network-monitor:
+    image: nicolaka/netshoot
+    container_name: network-monitor
+    networks:
+      - fl-network
+    command: ["sleep", "infinity"]
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.1'
+
+  # Resource monitoring dashboard
+  resource-monitor:
+    image: prom/node-exporter
+    container_name: resource-monitor
+    ports:
+      - "9100:9100"
+    networks:
+      - fl-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+
+networks:
+  fl-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+    driver_opts:
+      com.docker.network.bridge.name: fl-bridge
+
+volumes:
+  fl-data:
+    driver: local
+  logs:
+    driver: local
