@@ -1,0 +1,9 @@
+torch
+torchvision
+numpy
+scikit-learn
+pandas
+flwr
+medmnist
+torch-pruning
+opacus

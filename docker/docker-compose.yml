@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  server:
+    build:
+      context: ../
+      dockerfile: docker/server.Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    command: /app/docker/entrypoints/server_entrypoint.sh
+
+  client:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    deploy:
+      replicas: 10
+    command: /app/docker/entrypoints/client_entrypoint.sh
