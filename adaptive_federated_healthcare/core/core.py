@@ -522,7 +522,7 @@ train_ds, val_ds = random_split(full_train, [int(0.9*len(full_train)), len(full_
 train_loader = DataLoader(train_ds, batch_size=BATCH_TRAIN, shuffle=True, num_workers=CFG.num_workers)
 val_loader = DataLoader(val_ds, batch_size=BATCH_VAL, shuffle=False, num_workers=CFG.num_workers)
 teacher, _ = train_loop(teacher, train_loader, val_loader, epochs=CFG.teacher_epochs, lr=CFG.lr, weight_decay=CFG.weight_decay, dev=device, dp_cfg={"enabled":False})
-teacher_mets = compute_metrics(teacher, test_loader, device, num_classes)
+# teacher_mets = compute_metrics(teacher, test_loader, device, num_classes)
 save_params_ndarrays_to_pth(get_model_parameters_ndarrays(teacher), os.path.join(CFG.root_dir, CFG.teacher_dir, "teacher_model.pth"))
 
 client_full_loaders = {}

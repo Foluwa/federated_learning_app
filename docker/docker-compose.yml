@@ -1,4 +1,5 @@
 version: '3.8'
+
 services:
   server:
     build:
@@ -9,8 +10,9 @@ services:
     volumes:
       - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
     command: /app/docker/entrypoints/server_entrypoint.sh
-
-  client:
+  
+  # Define 10 separate client services with unique IDs
+  client-0:
     build:
       context: ../
       dockerfile: docker/client.Dockerfile
@@ -18,6 +20,114 @@ services:
       - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
     depends_on:
       - server
-    deploy:
-      replicas: 10
-    command: /app/docker/entrypoints/client_entrypoint.sh
+    environment:
+      - CLIENT_ID=0
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 0
+  
+  client-1:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=1
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 1
+  
+  client-2:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=2
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 2
+      
+  client-3:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=3
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 3
+      
+  client-4:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=4
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 4
+      
+  client-5:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=5
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 5
+      
+  client-6:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=6
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 6
+      
+  client-7:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=7
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 7
+      
+  client-8:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=8
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 8
+      
+  client-9:
+    build:
+      context: ../
+      dockerfile: docker/client.Dockerfile
+    volumes:
+      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+    depends_on:
+      - server
+    environment:
+      - CLIENT_ID=9
+    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 9
