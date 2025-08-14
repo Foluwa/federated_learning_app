@@ -46,6 +46,7 @@ class FedClient(fl.client.NumPyClient):
     def __init__(self, cid: str):
         self.cid = cid
         self.dev = torch.device("cpu")
+        self.tasks = []
 
         # ✅ Make sure directories exist first
         _ensure_client_dirs(self.cid)
@@ -57,7 +58,27 @@ class FedClient(fl.client.NumPyClient):
             parts = json.load(f)
 
         my_all = parts[str(self.cid)]
-        ...
+        # Build this client's task list
+        try:
+            if CFG.task_mode == "class-episodes":
+                self.tasks = build_class_episodes_local(self.ds_train, my_all, CFG.classes_per_task)
+            else:
+                rnd = random.Random(CFG.seed)
+                idxs = list(my_all)
+                rnd.shuffle(idxs)
+                shard_len = max(1, len(idxs) // CFG.tasks_per_client)
+                self.tasks = [idxs[i*shard_len:(i+1)*shard_len] for i in range(CFG.tasks_per_client)]
+                # put remainders into last shard
+                if len(idxs) % CFG.tasks_per_client != 0:
+                    self.tasks[-1].extend(idxs[CFG.tasks_per_client*shard_len:])
+        except Exception:
+            # final fallback: single task with all indices
+            self.tasks = [list(my_all)]
+
+        # Never allow empty
+        if not self.tasks:
+            self.tasks = [list(my_all)]
+
         # pointer file logic AFTER dirs exist
         self.ptr_file = _taskptr_path(self.cid)
         if not os.path.exists(self.ptr_file):
@@ -85,13 +106,28 @@ class FedClient(fl.client.NumPyClient):
             input_shape=(3,28,28), steps=1
         ) or CFG.batch_size
 
+    # def _next_task_indices(self):
+    #     with open(self.ptr_file, "r") as f:
+    #         ptr = json.load(f)["ptr"]
+    #     idxs = self.tasks[ptr % len(self.tasks)]
+    #     with open(self.ptr_file, "w") as f:
+    #         json.dump({"ptr": (ptr + 1) % len(self.tasks)}, f)
+    #     return idxs
+
     def _next_task_indices(self):
+        # Rebuild tasks if missing/empty (defensive)
+        if not getattr(self, "tasks", None):
+            with open(PARTITIONS_JSON, "r") as f:
+                parts = json.load(f)
+            self.tasks = [list(parts[str(self.cid)])]
+
         with open(self.ptr_file, "r") as f:
             ptr = json.load(f)["ptr"]
         idxs = self.tasks[ptr % len(self.tasks)]
         with open(self.ptr_file, "w") as f:
             json.dump({"ptr": (ptr + 1) % len(self.tasks)}, f)
         return idxs
+
 
     def get_parameters(self, config):
         return get_model_parameters_ndarrays(self.model)

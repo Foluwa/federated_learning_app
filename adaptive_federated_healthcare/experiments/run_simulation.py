@@ -3,6 +3,7 @@
 # Script to run the full simulation, including deployment and analysis.
 # =============================================================================
 import os
+import json
 import flwr as fl
 import torch
 import numpy as np
@@ -125,7 +126,13 @@ def deploy_and_analyze(results_by_strategy):
         print(f"\n=== Deployment build for {cname} ===")
         cdir = os.path.join(CFG.root_dir, f"deploy_{cname}"); os.makedirs(cdir, exist_ok=True)
         student = make_model(with_adapters=CFG.use_adapters).to(device)
-        student.base.load_state_dict(global_model.base.state_dict(), strict=True)
+        # student.base.load_state_dict(global_model.base.state_dict(), strict=True)
+        # Copy the global (BaseCNN) weights into the student.
+        if hasattr(student, "base"):  # AdapterCNN case
+            student.base.load_state_dict(global_model.state_dict(), strict=True)
+        else:  # BaseCNN case
+            student.load_state_dict(global_model.state_dict(), strict=True)
+
         profile_name = client_profile[cid_str]
         profile = DEVICE_PROFILES[profile_name]
         
