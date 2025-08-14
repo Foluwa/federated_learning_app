@@ -583,15 +583,53 @@ def load_or_train_teacher():
     return train_and_cache_teacher()
 
 
+# def save_history_json(hist, path):
+#     history_dict = {
+#         "rounds": hist.rounds,
+#         "metrics_distributed_fit": hist.metrics_distributed_fit,
+#         "metrics_distributed_evaluate": hist.metrics_distributed_evaluate,
+#         "metrics_centralized": hist.metrics_centralized
+#     }
+#     with open(path, "w") as f:
+#         json.dump(history_dict, f, indent=2)
+
 def save_history_json(hist, path):
-    history_dict = {
-        "rounds": hist.rounds,
-        "metrics_distributed_fit": hist.metrics_distributed_fit,
-        "metrics_distributed_evaluate": hist.metrics_distributed_evaluate,
-        "metrics_centralized": hist.metrics_centralized
-    }
+    # Prefer a robust representation if available
+    history_dict = {}
+    if hasattr(hist, "to_dict"):
+        try:
+            history_dict = hist.to_dict()
+        except Exception:
+            history_dict = {}
+
+    # Fall back to common attributes if needed
+    for attr in [
+        "metrics_distributed_fit",
+        "metrics_distributed_evaluate",
+        "metrics_centralized",
+        "losses_distributed",
+        "losses_centralized",
+    ]:
+        if hasattr(hist, attr) and attr not in history_dict:
+            history_dict[attr] = getattr(hist, attr)
+
+    # Derive rounds if not provided
+    if "rounds" not in history_dict:
+        try:
+            mc = history_dict.get("metrics_centralized", {})
+            # e.g., use length of the accuracy series if present
+            if isinstance(mc, dict) and "accuracy" in mc:
+                history_dict["rounds"] = len(mc["accuracy"])
+            elif "losses_centralized" in history_dict and history_dict["losses_centralized"]:
+                history_dict["rounds"] = len(history_dict["losses_centralized"])
+            else:
+                history_dict["rounds"] = None
+        except Exception:
+            history_dict["rounds"] = None
+
     with open(path, "w") as f:
         json.dump(history_dict, f, indent=2)
+
 
 def save_params_ndarrays_to_pth(params_nd, path):
     torch.save([torch.tensor(p) for p in params_nd], path)

@@ -46,26 +46,26 @@ class FedClient(fl.client.NumPyClient):
     def __init__(self, cid: str):
         self.cid = cid
         self.dev = torch.device("cpu")
+
+        # ✅ Make sure directories exist first
+        _ensure_client_dirs(self.cid)
+
         self.ds_train = DataClass(split="train", transform=transform, download=True)
         self.ds_test  = DataClass(split="test",  transform=transform,  download=True)
 
         with open(PARTITIONS_JSON, "r") as f:
             parts = json.load(f)
-        my_all = parts[str(self.cid)]
-        if CFG.task_mode == "class-episodes":
-            self.tasks = build_class_episodes_local(self.ds_train, my_all, CFG.classes_per_task)
-        else:
-            rnd = random.Random(CFG.seed); idxs = list(my_all); rnd.shuffle(idxs)
-            shard_len = len(idxs) // CFG.tasks_per_client
-            self.tasks = [idxs[i*shard_len:(i+1)*shard_len] for i in range(CFG.tasks_per_client)]
-            if len(idxs) % CFG.tasks_per_client != 0:
-                self.tasks[-1].extend(idxs[CFG.tasks_per_client*shard_len:])
 
+        my_all = parts[str(self.cid)]
+        ...
+        # pointer file logic AFTER dirs exist
         self.ptr_file = _taskptr_path(self.cid)
         if not os.path.exists(self.ptr_file):
+            # (belt + braces) ensure parent dir exists
+            os.makedirs(os.path.dirname(self.ptr_file), exist_ok=True)
             with open(self.ptr_file, "w") as f:
                 json.dump({"ptr": 0}, f)
-
+        
         self.model = make_model(with_adapters=False).to(self.dev)
         self.ewc = EWCOnline(self.model).to(self.dev) if CFG.use_ewc else None
         if CFG.use_ewc and os.path.exists(_ewc_path(self.cid)):
@@ -77,7 +77,7 @@ class FedClient(fl.client.NumPyClient):
             except Exception:
                 pass
 
-        _ensure_client_dirs(self.cid)
+        # _ensure_client_dirs(self.cid)
 
         self.profiled_batch = _profile_best_batch_size(
             deepcopy(self.model), self.dev,

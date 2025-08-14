@@ -80,6 +80,9 @@ def build_strategy(kind: str):
         fraction_evaluate=0.0,
         min_fit_clients=max(1, int(CFG.client_fraction * CFG.num_virtual_clients)),
         min_available_clients=CFG.num_virtual_clients,
+        # min_fit_clients = max(1, int(CFG.client_fraction * CFG.num_virtual_clients)),
+        # min_available_clients = max(min_fit_clients, int(CFG.client_fraction * CFG.num_virtual_clients)),
+
         evaluate_fn=server_eval_fn,
         fit_metrics_aggregation_fn=fit_metrics_agg,
     )
