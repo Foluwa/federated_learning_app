@@ -192,7 +192,8 @@ def compute_metrics(model, loader, dev, num_classes):
     y_true, y_pred, y_scores = [], [], []
     with torch.no_grad():
         for inputs, labels in loader:
-            inputs, labels = inputs.to(dev), labels.squeeze().to(dev)
+            inputs, labels = inputs.to(dev), labels = labels.to(dev).long().view(-1)
+
             outputs = model(inputs)
             preds = torch.argmax(outputs, dim=1)
             y_true.extend(labels.cpu().numpy())
@@ -248,7 +249,7 @@ class EWCOnline(nn.Module):
         model.train()
         for batch_idx, (inputs, labels) in enumerate(loader):
             if batch_idx >= max_batches: break
-            inputs, labels = inputs.to(dev), labels.squeeze().to(dev)
+            inputs, labels = inputs.to(dev), labels = labels.to(dev).long().view(-1)
             outputs = model(inputs)
             loss = torch.nn.functional.cross_entropy(outputs, labels)
             model.zero_grad()
@@ -312,8 +313,8 @@ def train_loop(
         total_loss = 0.0
         optimizer.zero_grad()
         for batch_idx, (inputs, labels) in enumerate(train_loader):
-            inputs, labels = inputs.to(dev), labels.squeeze().to(dev)
-            
+            inputs, labels = inputs.to(dev), labels.to(dev).long().view(-1)
+
             # with torch.autocast(device_type="cuda", dtype=dtype, enabled=CFG.use_amp):
             # with torch.autocast(device_type="cuda", dtype=dtype, enabled=(CFG.use_amp and torch.cuda.is_available())):
             dtype = get_autocast_dtype(CFG.amp_dtype)
