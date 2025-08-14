@@ -48,5 +48,6 @@
   "root_dir": "artifacts_fed_flwr_ray",
   "teacher_dir": "Teacher",
   "server_dir": "Server",
-  "client_metrics_dir": "ClientMetrics"
+  "client_metrics_dir": "ClientMetrics",
+  "pretrain_teacher_on_import": false
 }

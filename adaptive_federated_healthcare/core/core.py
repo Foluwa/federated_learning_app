@@ -192,8 +192,7 @@ def compute_metrics(model, loader, dev, num_classes):
     y_true, y_pred, y_scores = [], [], []
     with torch.no_grad():
         for inputs, labels in loader:
-            inputs, labels = inputs.to(dev), labels = labels.to(dev).long().view(-1)
-
+            inputs, labels = inputs.to(dev), labels.squeeze().to(dev)
             outputs = model(inputs)
             preds = torch.argmax(outputs, dim=1)
             y_true.extend(labels.cpu().numpy())
@@ -249,7 +248,7 @@ class EWCOnline(nn.Module):
         model.train()
         for batch_idx, (inputs, labels) in enumerate(loader):
             if batch_idx >= max_batches: break
-            inputs, labels = inputs.to(dev), labels = labels.to(dev).long().view(-1)
+            inputs, labels = inputs.to(dev), labels.squeeze().to(dev)
             outputs = model(inputs)
             loss = torch.nn.functional.cross_entropy(outputs, labels)
             model.zero_grad()
@@ -313,8 +312,8 @@ def train_loop(
         total_loss = 0.0
         optimizer.zero_grad()
         for batch_idx, (inputs, labels) in enumerate(train_loader):
-            inputs, labels = inputs.to(dev), labels.to(dev).long().view(-1)
-
+            inputs, labels = inputs.to(dev), labels.squeeze().to(dev)
+            
             # with torch.autocast(device_type="cuda", dtype=dtype, enabled=CFG.use_amp):
             # with torch.autocast(device_type="cuda", dtype=dtype, enabled=(CFG.use_amp and torch.cuda.is_available())):
             dtype = get_autocast_dtype(CFG.amp_dtype)
@@ -593,44 +592,6 @@ def load_or_train_teacher():
 #     }
 #     with open(path, "w") as f:
 #         json.dump(history_dict, f, indent=2)
-
-def save_history_json(hist, path):
-    # Prefer a robust representation if available
-    history_dict = {}
-    if hasattr(hist, "to_dict"):
-        try:
-            history_dict = hist.to_dict()
-        except Exception:
-            history_dict = {}
-
-    # Fall back to common attributes if needed
-    for attr in [
-        "metrics_distributed_fit",
-        "metrics_distributed_evaluate",
-        "metrics_centralized",
-        "losses_distributed",
-        "losses_centralized",
-    ]:
-        if hasattr(hist, attr) and attr not in history_dict:
-            history_dict[attr] = getattr(hist, attr)
-
-    # Derive rounds if not provided
-    if "rounds" not in history_dict:
-        try:
-            mc = history_dict.get("metrics_centralized", {})
-            # e.g., use length of the accuracy series if present
-            if isinstance(mc, dict) and "accuracy" in mc:
-                history_dict["rounds"] = len(mc["accuracy"])
-            elif "losses_centralized" in history_dict and history_dict["losses_centralized"]:
-                history_dict["rounds"] = len(history_dict["losses_centralized"])
-            else:
-                history_dict["rounds"] = None
-        except Exception:
-            history_dict["rounds"] = None
-
-    with open(path, "w") as f:
-        json.dump(history_dict, f, indent=2)
-
 
 def save_params_ndarrays_to_pth(params_nd, path):
     torch.save([torch.tensor(p) for p in params_nd], path)
