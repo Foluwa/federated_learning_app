@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from ..core.core import (
     CFG,
     teacher,
-    teacher_mets,
+    # teacher_mets,
     make_model,
     set_model_parameters_from_ndarrays,
     get_model_parameters_ndarrays,
@@ -24,7 +24,7 @@ from ..core.core import (
     assign_profile,
     count_params,
     model_size_mb,
-    meet_latency_target,
+    # meet_latency_target,
     full_train,
     test_loader,
     device,
@@ -39,6 +39,7 @@ from ..core.core import (
     client_full_loaders,
     BATCH_VAL
 )
+from ..core.core import teacher_mets, test_loader 
 from ..server.app import build_strategy
 from ..client.app import FedClient
 from torch.utils.data import DataLoader, Subset

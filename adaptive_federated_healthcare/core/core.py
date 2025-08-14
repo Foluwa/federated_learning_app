@@ -77,6 +77,8 @@ class CFG:
     teacher_dir: str = "Teacher"
     server_dir: str = "Server"
     client_metrics_dir: str = "ClientMetrics"
+    pretrain_teacher_on_import: bool = False
+
 
 CFG = CFG()
 if CFG.strategies_to_run is None:
@@ -110,10 +112,21 @@ class_names = [info['label'][k] for k in sorted(info['label'].keys())]
 transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize([.5,.5,.5],[.5,.5,.5])])
 full_train = DataClass(split="train", transform=transform, download=True)
 test_ds  = DataClass(split="test",  transform=transform,  download=True)
+test_loader = DataLoader(test_ds, batch_size=BATCH_VAL, shuffle=False, num_workers=CFG.num_workers)
 train_len = len(full_train)
 test_len  = len(test_ds)
 
 PARTITIONS_JSON = os.path.join(CFG.root_dir, "partitions.json")
+# Ensure partitions.json exists before any open()
+if not os.path.exists(PARTITIONS_JSON):
+    os.makedirs(CFG.root_dir, exist_ok=True)
+    idxs = list(range(len(full_train)))
+    random.shuffle(idxs)
+    shards = np.array_split(idxs, CFG.num_virtual_clients)
+    parts = {str(i): shards[i].tolist() for i in range(CFG.num_virtual_clients)}
+    with open(PARTITIONS_JSON, "w") as f:
+        json.dump(parts, f, indent=2)
+
 def split_indices(indices: List[int], val_frac: float = 0.1, seed: int = 42, salt: Any = None) -> Tuple[List[int], List[int]]:
     rng = random.Random(seed)
     if salt is not None: rng.seed(str(seed) + str(salt))
@@ -285,7 +298,13 @@ def train_loop(
             poisson_sampling=False, # We are not using poisson sampling for simplicity
         )
     
-    scaler = torch.cuda.amp.GradScaler(enabled=(CFG.use_amp and get_autocast_dtype(CFG.amp_dtype) == torch.float16))
+    # scaler = torch.cuda.amp.GradScaler(enabled=(CFG.use_amp and get_autocast_dtype(CFG.amp_dtype) == torch.float16))
+    # scaler = torch.cuda.amp.GradScaler(enabled=(CFG.use_amp and torch.cuda.is_available() and get_autocast_dtype(CFG.amp_dtype) == torch.float16))
+    use_cuda = torch.cuda.is_available()
+    scaler = torch.amp.GradScaler(
+        'cuda',  # device for scaling; only used when enabled=True
+        enabled=(CFG.use_amp and use_cuda and get_autocast_dtype(CFG.amp_dtype) == torch.float16),
+    )
     dtype = get_autocast_dtype(CFG.amp_dtype)
     
     for epoch in range(epochs):
@@ -295,7 +314,10 @@ def train_loop(
         for batch_idx, (inputs, labels) in enumerate(train_loader):
             inputs, labels = inputs.to(dev), labels.squeeze().to(dev)
             
-            with torch.autocast(device_type="cuda", dtype=dtype, enabled=CFG.use_amp):
+            # with torch.autocast(device_type="cuda", dtype=dtype, enabled=CFG.use_amp):
+            # with torch.autocast(device_type="cuda", dtype=dtype, enabled=(CFG.use_amp and torch.cuda.is_available())):
+            dtype = get_autocast_dtype(CFG.amp_dtype)
+            with torch.autocast( device_type="cuda", dtype=dtype, enabled=(CFG.use_amp and torch.cuda.is_available()) ):
                 outputs = model(inputs)
                 loss = torch.nn.functional.cross_entropy(outputs, labels)
                 if ewc_state and ewc_lambda > 0.0:
@@ -324,10 +346,28 @@ def train_loop(
 def get_model_parameters_ndarrays(model):
     return [p.cpu().detach().numpy() for p in model.parameters()]
 
+def get_model_parameters_ndarrays(model):
+    # Preserve the model's state_dict ordering
+    return [param.detach().cpu().numpy() for _, param in model.state_dict().items()]
+
 def set_model_parameters_from_ndarrays(model, params_nd):
-    params_dict = zip(model.state_dict().keys(), params_nd)
-    state_dict = {k: torch.tensor(v) for k, v in params_dict}
+    # Pair the arrays with the model's own state_dict key order
+    keys = list(model.state_dict().keys())
+    if len(keys) != len(params_nd):
+        raise ValueError(f"Mismatch: model has {len(keys)} tensors but got {len(params_nd)} arrays")
+
+    state_dict = {}
+    for k, arr in zip(keys, params_nd):
+        t = torch.tensor(arr)
+        # ensure dtype/device compatibility where needed
+        state_dict[k] = t
+
     model.load_state_dict(state_dict, strict=True)
+
+# def set_model_parameters_from_ndarrays(model, params_nd):
+#     params_dict = zip(model.state_dict().keys(), params_nd)
+#     state_dict = {k: torch.tensor(v) for k, v in params_dict}
+#     model.load_state_dict(state_dict, strict=True)
 
 def build_class_episodes_local(ds, client_indices, classes_per_task):
     class_indices = {i: [] for i in range(num_classes)}
@@ -412,26 +452,43 @@ def _auc_from_scores(mem_scores, non_scores):
         return np.nan
 
 def _profile_best_batch_size(model, dev, candidate_sizes, input_shape=(3, 28, 28), steps=5):
-    best_bs = 0; best_lat = float('inf')
+    best_bs = 0
+    best_lat = float('inf')
+
     with contextlib.ExitStack() as stack:
-        if CFG.use_amp and torch.cuda.is_available():
+        # Only enable autocast on CUDA if AMP is enabled
+        if CFG.use_amp and torch.cuda.is_available() and dev.type == "cuda":
             stack.enter_context(torch.autocast(device_type="cuda", dtype=get_autocast_dtype(CFG.amp_dtype)))
+
         for bs in candidate_sizes:
             try:
                 inputs = torch.randn(bs, *input_shape, device=dev)
                 model.eval()
-                torch.cuda.synchronize()
+
+                # Synchronize only if CUDA is available
+                if torch.cuda.is_available() and dev.type == "cuda":
+                    torch.cuda.synchronize()
+
                 start = time.perf_counter()
                 for _ in range(steps):
                     _ = model(inputs)
-                torch.cuda.synchronize()
-                end = time.perf_counter()
-                latency = (end - start) * 1000 / steps
-                if latency < best_lat:
-                    best_lat = latency; best_bs = bs
+
+                if torch.cuda.is_available() and dev.type == "cuda":
+                    torch.cuda.synchronize()
+
+                latency = (end := time.perf_counter()) - start
+                latency_ms = latency * 1000 / steps
+
+                if latency_ms < best_lat:
+                    best_lat = latency_ms
+                    best_bs = bs
+
             except RuntimeError:
+                # If OOM or unsupported batch size, skip it
                 continue
+
     return best_bs
+
 
 def _update_seq_accuracy_matrix(cid_str, task_id, model_for_eval, ds, tasks, dev):
     cdir = _client_dir(cid_str)
@@ -475,6 +532,43 @@ def _compute_forgetting_metrics(cid_str):
 
     return avg_acc_seq, bwt, avg_forgetting
 
+def _teacher_ckpt_path():
+    return os.path.join(CFG.root_dir, CFG.teacher_dir, "teacher_model.pth")
+
+def train_and_cache_teacher():
+    """Train the teacher once, cache weights, and return (teacher, metrics)."""
+    model = make_model(with_adapters=False).to(device)
+    train_ds, val_ds = random_split(
+        full_train,
+        [int(0.9*len(full_train)), len(full_train)-int(0.9*len(full_train))],
+        generator=torch.Generator().manual_seed(CFG.seed),
+    )
+    train_loader = DataLoader(train_ds, batch_size=BATCH_TRAIN, shuffle=True, num_workers=CFG.num_workers)
+    val_loader   = DataLoader(val_ds, batch_size=BATCH_VAL, shuffle=False, num_workers=CFG.num_workers)
+
+    model, _ = train_loop(
+        model, train_loader, val_loader,
+        epochs=CFG.teacher_epochs, lr=CFG.lr, weight_decay=CFG.weight_decay,
+        dev=device, dp_cfg={"enabled": False}
+    )
+    mets = compute_metrics(model, test_loader, device, num_classes)
+    save_params_ndarrays_to_pth(get_model_parameters_ndarrays(model), _teacher_ckpt_path())
+    return model, mets
+
+def load_or_train_teacher():
+    """Load teacher if present; otherwise train-and-cache."""
+    p = _teacher_ckpt_path()
+    model = make_model(with_adapters=False).to(device)
+    if os.path.exists(p):
+        # load list of tensors and map into state_dict
+        tensors = torch.load(p, map_location=device)
+        named = dict(zip(model.state_dict().keys(), tensors))
+        model.load_state_dict({k: v if isinstance(v, torch.Tensor) else torch.tensor(v) for k,v in named.items()}, strict=True)
+        mets = compute_metrics(model, test_loader, device, num_classes)
+        return model, mets
+    return train_and_cache_teacher()
+
+
 def save_history_json(hist, path):
     history_dict = {
         "rounds": hist.rounds,
@@ -516,6 +610,8 @@ def add_summary_row(rows, stage, client_name, model_type, model, metrics,
 def make_loader_from_indices(ds, indices, batch_size, shuffle, num_workers=0):
     return DataLoader(Subset(ds, indices), batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
 
+
+
 # Create a teacher model for pre-training and initialization
 teacher = make_model(with_adapters=False).to(device)
 train_ds, val_ds = random_split(full_train, [int(0.9*len(full_train)), len(full_train)-int(0.9*len(full_train))], generator=torch.Generator().manual_seed(CFG.seed))
@@ -523,6 +619,11 @@ train_loader = DataLoader(train_ds, batch_size=BATCH_TRAIN, shuffle=True, num_wo
 val_loader = DataLoader(val_ds, batch_size=BATCH_VAL, shuffle=False, num_workers=CFG.num_workers)
 teacher, _ = train_loop(teacher, train_loader, val_loader, epochs=CFG.teacher_epochs, lr=CFG.lr, weight_decay=CFG.weight_decay, dev=device, dp_cfg={"enabled":False})
 # teacher_mets = compute_metrics(teacher, test_loader, device, num_classes)
+if CFG.pretrain_teacher_on_import:
+    teacher, teacher_mets = train_and_cache_teacher()
+else:
+    teacher, teacher_mets = load_or_train_teacher()
+
 save_params_ndarrays_to_pth(get_model_parameters_ndarrays(teacher), os.path.join(CFG.root_dir, CFG.teacher_dir, "teacher_model.pth"))
 
 client_full_loaders = {}

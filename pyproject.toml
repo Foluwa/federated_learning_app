@@ -12,6 +12,7 @@ numpy = "*"
 scikit-learn = "*"
 pandas = "*"
 flwr = "*"
+matplotlib = "*"
 medmnist = "*"
 torch-pruning = "*"
 opacus = {version = "*", optional = true}

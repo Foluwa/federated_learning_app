@@ -6,6 +6,7 @@ import os
 import flwr as fl
 import torch
 import numpy as np
+from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
 
 from ..core.core import (
     CFG,
