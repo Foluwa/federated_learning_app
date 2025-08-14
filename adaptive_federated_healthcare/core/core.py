@@ -398,11 +398,25 @@ def central_eval_acc_from_ndarrays(params: List[np.ndarray]) -> Tuple[float, Dic
     loss = 1.0 - metrics["accuracy"]
     return float(loss), {"accuracy": float(metrics["accuracy"])}
 
-def server_eval_fn(server_round: int, parameters: fl.common.Parameters, config: Dict[str, fl.common.Scalar]):
-    ndarrays = parameters_to_ndarrays(parameters)
+# def server_eval_fn(server_round: int, parameters: fl.common.Parameters, config: Dict[str, fl.common.Scalar]):
+#     ndarrays = parameters_to_ndarrays(parameters)
+#     loss, metrics = central_eval_acc_from_ndarrays(ndarrays)
+#     print(f"[Server] Round {server_round} validation metrics: {metrics}")
+#     return loss, metrics
+
+def server_eval_fn(server_round: int, parameters, config):
+    # Flower compatibility: in newer versions, `parameters` is already a list[np.ndarray]
+    # In older versions, it can be a flwr.common.Parameters object.
+    if isinstance(parameters, list):
+        ndarrays = parameters
+    else:
+        # Fallback for older Flower
+        ndarrays = parameters_to_ndarrays(parameters)
+
     loss, metrics = central_eval_acc_from_ndarrays(ndarrays)
     print(f"[Server] Round {server_round} validation metrics: {metrics}")
     return loss, metrics
+
 
 def fit_metrics_agg(metrics: List[Tuple[int, Dict]]) -> Dict[str, fl.common.Scalar]:
     fit_metrics = {}
