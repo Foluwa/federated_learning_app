@@ -11,7 +11,7 @@ torchvision = ">=0.10"
 numpy = "*"
 scikit-learn = "*"
 pandas = "*"
-flwr = "*"
+flwr = { version = "*", extras = ["simulation"] }
 matplotlib = "*"
 medmnist = "*"
 torch-pruning = "*"

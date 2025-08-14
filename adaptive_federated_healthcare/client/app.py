@@ -30,7 +30,6 @@ from ..core.core import (
     _save_json,
     _profile_best_batch_size,
     _update_seq_accuracy_matrix,
-    _compute_mia_auc,
     full_train,
     test_ds,
     device,
