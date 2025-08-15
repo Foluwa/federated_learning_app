@@ -21,7 +21,7 @@ from sklearn.metrics import (
 )
 import pandas as pd
 import flwr as fl
-from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
+from flwr.common import parameters_to_ndarrays
 try:
     from opacus import PrivacyEngine
     _HAS_OPACUS = True
@@ -324,6 +324,7 @@ def train_loop(
                     ewc_loss = 0
                     for n, p in model.named_parameters():
                         if n in ewc_state.fisher:
+                            # TODO: EWC penalty math
                             ewc_loss += (ewc_state.fisher[n] * (p - ewc_state.params[n])).sum()
                     loss += ewc_lambda * ewc_loss
                 loss = loss / grad_accum_steps
@@ -581,17 +582,6 @@ def load_or_train_teacher():
         mets = compute_metrics(model, test_loader, device, num_classes)
         return model, mets
     return train_and_cache_teacher()
-
-
-# def save_history_json(hist, path):
-#     history_dict = {
-#         "rounds": hist.rounds,
-#         "metrics_distributed_fit": hist.metrics_distributed_fit,
-#         "metrics_distributed_evaluate": hist.metrics_distributed_evaluate,
-#         "metrics_centralized": hist.metrics_centralized
-#     }
-#     with open(path, "w") as f:
-#         json.dump(history_dict, f, indent=2)
 
 def save_params_ndarrays_to_pth(params_nd, path):
     torch.save([torch.tensor(p) for p in params_nd], path)

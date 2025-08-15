@@ -10,17 +10,11 @@ from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
 
 from ..core.core import (
     CFG,
-    make_model,
-    set_model_parameters_from_ndarrays,
     get_model_parameters_ndarrays,
     central_eval_acc_from_ndarrays,
     server_eval_fn,
     fit_metrics_agg,
     teacher,
-    train_loader,
-    test_loader,
-    device,
-    save_history_json,
     save_params_ndarrays_to_pth
 )
 

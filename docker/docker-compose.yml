@@ -1,133 +1,101 @@
-version: '3.8'
+version: "3.8"
 
+# ---------- Reusable blocks (anchors) ----------
+x-common-env: &common-env
+  PYTHONUNBUFFERED: "1"
+  TORCH_HOME: /root/.cache/torch
+
+x-common-volumes: &common-volumes
+  - medmnist_cache:/root/.medmnist
+  - torch_cache:/root/.cache/torch
+  - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+
+x-client-base: &client-base
+  build:
+    context: ../
+    dockerfile: docker/client.Dockerfile
+  depends_on:
+    server:
+      condition: service_healthy
+  environment:
+    PYTHONUNBUFFERED: "1"
+    TORCH_HOME: /root/.cache/torch
+  volumes:
+    - medmnist_cache:/root/.medmnist
+    - torch_cache:/root/.cache/torch
+    - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
+  restart: unless-stopped
+
+  # IMPORTANT: command must be only the two positional args (server address, client id)
+  # The ENTRYPOINT in client image will prepend the script.
+
+# ---------- Services ----------
 services:
+
   server:
     build:
       context: ../
       dockerfile: docker/server.Dockerfile
     ports:
       - "8080:8080"
+    environment:
+      PYTHONUNBUFFERED: "1"
+      TORCH_HOME: /root/.cache/torch
     volumes:
+      - medmnist_cache:/root/.medmnist
+      - torch_cache:/root/.cache/torch
       - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    command: /app/docker/entrypoints/server_entrypoint.sh
-  
-  # Define 10 separate client services with unique IDs
+    restart: unless-stopped
+    command: ["/app/docker/entrypoints/server_entrypoint.sh"]
+    healthcheck:
+      # Wait generously on first run (dataset is ~206MB and the app does work before binding)
+      test: ["CMD-SHELL", "python3 -c \"import socket,sys; s=socket.socket(); s.settimeout(1); sys.exit(0) if s.connect_ex(('localhost',8080))==0 else sys.exit(1)\""]
+      interval: 10s
+      timeout: 3s
+      retries: 180         # ~30 minutes total if needed
+      start_period: 15m    # don't even start checking for 15 minutes
+
+  # 10 clients: pass only args ["server:8080", "<id>"]
   client-0:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=0
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 0
-  
+    <<: *client-base
+    command: ["server:8080", "0"]
+
   client-1:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=1
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 1
-  
+    <<: *client-base
+    command: ["server:8080", "1"]
+
   client-2:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=2
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 2
-      
+    <<: *client-base
+    command: ["server:8080", "2"]
+
   client-3:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=3
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 3
-      
+    <<: *client-base
+    command: ["server:8080", "3"]
+
   client-4:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=4
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 4
-      
+    <<: *client-base
+    command: ["server:8080", "4"]
+
   client-5:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=5
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 5
-      
+    <<: *client-base
+    command: ["server:8080", "5"]
+
   client-6:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=6
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 6
-      
+    <<: *client-base
+    command: ["server:8080", "6"]
+
   client-7:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=7
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 7
-      
+    <<: *client-base
+    command: ["server:8080", "7"]
+
   client-8:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=8
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 8
-      
+    <<: *client-base
+    command: ["server:8080", "8"]
+
   client-9:
-    build:
-      context: ../
-      dockerfile: docker/client.Dockerfile
-    volumes:
-      - ./artifacts_fed_flwr_ray:/app/artifacts_fed_flwr_ray
-    depends_on:
-      - server
-    environment:
-      - CLIENT_ID=9
-    command: /app/docker/entrypoints/client_entrypoint.sh server:8080 9
+    <<: *client-base
+    command: ["server:8080", "9"]
+
+volumes:
+  medmnist_cache:
+  torch_cache:

@@ -57,6 +57,11 @@ class FedClient(fl.client.NumPyClient):
         with open(PARTITIONS_JSON, "r") as f:
             parts = json.load(f)
 
+        # Defensive: if cid looks like a host:port, you likely passed args in wrong order
+        if isinstance(self.cid, str) and ":" in self.cid and self.cid not in parts:
+            raise ValueError(f"Client ID looks like a server address: {self.cid}. "
+                            f"Expected a numeric ID key from partitions.json ({list(parts.keys())[:5]}...).")
+
         my_all = parts[str(self.cid)]
         # Build this client's task list
         try:
